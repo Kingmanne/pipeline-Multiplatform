@@ -53,7 +53,7 @@ phases:
 
 artifacts:
   # ✅ PRIMARY artifact (this fixes your error)
-  base-directory: ec2-artifact
+  base-directory: BuildArtifact
   files:
     - '**/*'
 
@@ -68,4 +68,3 @@ artifacts:
 cache:
   paths:
     - 'node_modules/**/*'
-    
