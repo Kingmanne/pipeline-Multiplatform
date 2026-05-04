@@ -12,8 +12,6 @@ phases:
       - export NODE_ENV=$(aws ssm get-parameter --name /sour-mango/$ENVIRONMENT/node-env --query 'Parameter.Value' --output text) || true
       - export APP_NAME=$(aws ssm get-parameter --name /sour-mango/$ENVIRONMENT/app-name --query 'Parameter.Value' --output text) || true
       - export PORT=$(aws ssm get-parameter --name /sour-mango/$ENVIRONMENT/port --query 'Parameter.Value' --output text) || true
-      - CURRENT_VERSION=$(aws lambda get-alias --function-name payment-processor --name live --query 'FunctionVersion' --output text)
-      - echo "Current live version is $CURRENT_VERSION"
 
   build:
     commands:
@@ -26,10 +24,16 @@ phases:
   post_build:
     commands:
       - npm run test:smoke
+
+      # Deploy new code to Lambda
       - aws lambda update-function-code --function-name payment-processor --zip-file fileb://lambda.zip
       - aws lambda wait function-updated --function-name payment-processor
+
+      # Publish new version
       - NEW_VERSION=$(aws lambda publish-version --function-name payment-processor --query 'Version' --output text)
-      - echo "New version is $NEW_VERSION"
+      - echo "New Lambda version is $NEW_VERSION"
+
+      # Build EC2 artifact (unchanged)
       - mkdir -p ec2-artifact
       - cp .env ec2-artifact/
       - cp package.json ec2-artifact/
@@ -40,11 +44,16 @@ phases:
       - cp -r public ec2-artifact/ 2>/dev/null || true
       - cp -r scripts ec2-artifact/
       - cp appspec-ec2.yml ec2-artifact/appspec.yml
+
+      # Lambda deployment artifact
       - mkdir -p lambda-artifact
       - cp lambda.zip lambda-artifact/
       - cp appspec-lambda-template.yml lambda-artifact/appspec.yml
-      - sed -i "s/CURRENT_VERSION_PLACEHOLDER/$CURRENT_VERSION/" lambda-artifact/appspec.yml
+
+      # ONLY inject target version (no current version anymore)
       - sed -i "s/TARGET_VERSION_PLACEHOLDER/$NEW_VERSION/" lambda-artifact/appspec.yml
+
+      - echo "Final AppSpec:"
       - cat lambda-artifact/appspec.yml
 
 artifacts:
@@ -53,6 +62,7 @@ artifacts:
       base-directory: ec2-artifact
       files:
         - '**/*'
+
     lambda-artifact:
       base-directory: lambda-artifact
       files:
@@ -62,3 +72,4 @@ artifacts:
 cache:
   paths:
     - 'node_modules/**/*'
+    
